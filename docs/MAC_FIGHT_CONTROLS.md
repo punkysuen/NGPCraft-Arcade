@@ -48,7 +48,7 @@ SDL 遊戲手把按鈕編號（Xbox 布局）：`0=A, 1=B, 2=X, 3=Y`。
 在專案 venv 內重裝 PyQt6 套件（常見於首次安裝不完整或 Python 3.14 環境）：
 
 ```bash
-cd /Users/suenkin/Desktop/Cursor/ngpc
+cd /path/to/NGPCraft-Arcade   # 你的 clone 目錄
 source .venv/bin/activate
 pip install --force-reinstall PyQt6 PyQt6-Qt6 PyQt6-sip
 python3 -c "from PyQt6.QtWidgets import QApplication; import sys; QApplication(sys.argv); print('Qt OK')"

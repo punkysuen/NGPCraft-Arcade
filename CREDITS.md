@@ -13,7 +13,7 @@
 
 1. Keep the **complete MIT license text** in `LICENSE`.
 2. Keep **tixul’s copyright line** for upstream code.
-3. Add **your copyright line** for your modifications (already: `Copyright (c) 2026 suenkin`).
+3. Add **your copyright line** for your modifications (already: `Copyright (c) 2026 Suen Kin`).
 4. Do **not** ship ROMs or BIOS.
 
 This edition is **not** Beetle NeoPop / libretro; it uses the NgpCraft native C++ core (MIT).
