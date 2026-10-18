@@ -25,7 +25,8 @@ Single codebase, two desktop builds. Based on [NgpCraft Emulator](https://github
 
 - [MAC_FIGHT_CONTROLS.md](MAC_FIGHT_CONTROLS.md) — fight input and Mac `.app` notes  
 - [WINDOWS_DEVELOPMENT.md](WINDOWS_DEVELOPMENT.md) — Windows venv, CMake, PyInstaller  
-- [RELEASE_v0.5.0.md](RELEASE_v0.5.0.md) — v0.5.0 release notes (English)
+- [RELEASE_v0.5.0.md](RELEASE_v0.5.0.md) — v0.5.0 release notes (English)  
+- [UPSTREAM_README.md](UPSTREAM_README.md) — full original NgpCraft Emulator manual (advanced / developer reference)
 
 ## Legal
 
