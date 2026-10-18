@@ -1,6 +1,11 @@
 MIT License
 
 Copyright (c) 2026 tixul
+Copyright (c) 2026 Suen Kin
+
+The NGPCraft Arcade edition (macOS packaging, fight input, and related UI changes)
+is a derivative work of NgpCraft Emulator. The above notice for tixul applies to
+the upstream project; the notice for Suen Kin applies to those modifications.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

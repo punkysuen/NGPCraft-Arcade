@@ -31,7 +31,7 @@ from PyQt6.QtCore import (Qt, QTimer, QSize, QObject, QThread, QEvent, QDateTime
                           QRect, pyqtSignal)
 from PyQt6.QtGui import (
     QImage, QPixmap, QKeyEvent, QKeySequence, QFont, QFontMetrics, QIcon,
-    QPainter, QColor,
+    QPainter, QColor, QDragEnterEvent, QDropEvent,
 )
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
 from PyQt6.QtWidgets import (
@@ -64,6 +64,9 @@ import ngpc_settings as cfg  # noqa: E402
 import ngpc_video  # noqa: E402
 import ngpc_library as lib  # noqa: E402
 import ngpc_input  # noqa: E402
+import ngpc_fight_input  # noqa: E402
+import ngpc_rom_drop  # noqa: E402
+import ngpc_app_info as app_info  # noqa: E402
 import ngpc_theme  # noqa: E402
 import ngpc_filters  # noqa: E402
 
@@ -84,7 +87,12 @@ _NO_CART = b"\xff" * 0x10000
 # saves, screenshots — must live BESIDE the .exe so it survives across launches
 # (the _MEIPASS extraction dir is wiped on exit). From source both are the repo.
 if getattr(sys, "frozen", False):
-    REPO = Path(sys.executable).resolve().parent      # writable data, next to the .exe
+    _exe = Path(sys.executable).resolve()
+    # macOS .app: keep saves/ROM folder beside the bundle, not inside read-only Contents/.
+    if sys.platform == "darwin" and _exe.parent.name == "MacOS":
+        REPO = _exe.parent.parent.parent.parent
+    else:
+        REPO = _exe.parent
     BUNDLE = Path(getattr(sys, "_MEIPASS", REPO))     # read-only, bundled in the .exe
 else:
     REPO = Path(__file__).resolve().parent
@@ -1343,7 +1351,11 @@ class LibraryPage(QWidget):
         # Two different empties: no ROMs at all (point me at a folder) vs. a search
         # or filter that matched nothing (your library is fine, the query is not).
         self._empty.setVisible(not self._roms)
-        self._empty.setText(cfg.tr(lang, "no_roms" if not self._all_roms else "no_match"))
+        empty_key = "no_roms" if not self._all_roms else "no_match"
+        empty_msg = cfg.tr(lang, empty_key)
+        if not self._all_roms:
+            empty_msg += "\n\n" + cfg.tr(lang, "drop_rom_hint")
+        self._empty.setText(empty_msg)
         fav_add, fav_rm = cfg.tr(lang, "fav_add"), cfg.tr(lang, "fav_remove")
         # Decided over the WHOLE library, not the filtered view, so a search or a
         # favourites filter never changes the name a card goes by.
@@ -1601,9 +1613,9 @@ class SettingsPage(QWidget):
         self._cats.setObjectName("cats")
         self._cats.setFixedWidth(150)
         for key in ("cat_general", "cat_bios", "cat_graphics", "cat_audio",
-                    "cat_controls", "cat_hotkeys"):
+                    "cat_controls", "cat_hotkeys", "cat_about"):
             QListWidgetItem(self._cats)
-        self._cats.currentRowChanged.connect(lambda i: self._stack.setCurrentIndex(i))
+        self._cats.currentRowChanged.connect(self._on_settings_category)
         root.addWidget(self._cats)
 
         self._stack = QStackedWidget()
@@ -1613,6 +1625,7 @@ class SettingsPage(QWidget):
         self._stack.addWidget(self._audio_panel())
         self._stack.addWidget(self._controls_panel())
         self._stack.addWidget(self._hotkeys_panel())
+        self._stack.addWidget(self._about_panel())
         # SCROLLED, both ways. The tallest panel wants ~1000 px and the widest ~660;
         # a 1366x768 laptop (614 px of usable height at 125% scaling) has neither, and
         # without a scroll area the rows past the fold are simply unreachable -- there
@@ -1628,6 +1641,16 @@ class SettingsPage(QWidget):
         self.retranslate()
 
     _CATEGORY_ROW = {"bios": 1, "video": 2, "audio": 3, "controls": 4}
+    _CONTROLS_CAT_ROW = 4
+
+    def _on_settings_category(self, row: int) -> None:
+        self._stack.setCurrentIndex(row)
+        if row == self._CONTROLS_CAT_ROW:
+            self._refresh_pad_state()
+            if ngpc_input.sdl_backend_allowed() and not self._pad_timer.isActive():
+                self._pad_timer.start(1000)
+        else:
+            self._pad_timer.stop()
 
     def show_category(self, category: str) -> None:
         self._cats.setCurrentRow(self._CATEGORY_ROW.get(category, 0))
@@ -1726,6 +1749,17 @@ class SettingsPage(QWidget):
             v.addWidget(r)
         v.addWidget(self._cartwait_hint)
         v.addWidget(self._portable_hint)
+        return w
+
+    def _about_panel(self) -> QWidget:
+        w, v = self._panel()
+        self._about_text = QLabel()
+        self._about_text.setObjectName("hint")
+        self._about_text.setWordWrap(True)
+        self._about_text.setTextFormat(Qt.TextFormat.RichText)
+        self._about_text.setOpenExternalLinks(True)
+        v.addWidget(self._about_text)
+        v.addStretch(1)
         return w
 
     def _on_portable_toggled(self, enabled: bool) -> None:
@@ -2065,6 +2099,16 @@ class SettingsPage(QWidget):
         self._lbl_turbo_rate = QLabel()
         v.addWidget(_row(self._lbl_turbo_rate, self._turbo_rate))
 
+        # -- fight (four-button NGPC fighter macros)
+        self._fight_hint = QLabel(); self._fight_hint.setObjectName("hint")
+        self._fight_hint.setWordWrap(True)
+        v.addWidget(self._fight_hint)
+        self._fight_box = QCheckBox(); self._fight_box.setChecked(cfg.fight_mode(self._settings))
+        self._fight_box.toggled.connect(
+            lambda b: (cfg.set_fight_mode(self._settings, b), self.changed.emit()))
+        self._lbl_fight = QLabel()
+        v.addWidget(_row(self._lbl_fight, self._fight_box))
+
         # -- controller
         self._pad_hint = QLabel(); self._pad_hint.setObjectName("hint")
         self._pad_hint.setWordWrap(True)
@@ -2081,16 +2125,16 @@ class SettingsPage(QWidget):
         self._pad_idx_spin.setValue(cfg.player_pad_index(self._settings, self._ctrl_player) + 1)
         self._pad_idx_spin.valueChanged.connect(
             lambda v: (cfg.set_player_pad_index(self._settings, self._ctrl_player, v - 1),
+                       self._sync_pad_probe(),
                        self.changed.emit()))
         self._lbl_pad_idx = QLabel()
         v.addWidget(_row(self._lbl_pad_idx, self._pad_idx_spin))
         self._pad_state = QLabel(); self._pad_state.setObjectName("hint")
         v.addWidget(self._pad_state)
-        # A pad can be plugged in while this page is open, so the readout polls.
-        self._pad_probe = ngpc_input.make_pad(0)
+        # Poll only while Controls is visible; skip creating SDL on macOS .app (see make_pad).
+        self._pad_probe: ngpc_input.XInputPad | ngpc_input.SdlPad | None = None
         self._pad_timer = QTimer(self)
         self._pad_timer.timeout.connect(self._refresh_pad_state)
-        self._pad_timer.start(1000)
         return w
 
     def _refresh_conflicts(self) -> None:
@@ -2108,9 +2152,27 @@ class SettingsPage(QWidget):
             cfg.tr(lang, "hk_dupe").format(hk="; ".join(dupes)) if dupes else "")
         self._hk_dupe.setVisible(bool(dupes))
 
+    def _ensure_pad_probe(self) -> None:
+        if self._pad_probe is None and ngpc_input.sdl_backend_allowed():
+            idx = max(0, self._pad_idx_spin.value() - 1)
+            self._pad_probe = ngpc_input.make_pad(idx)
+
+    def _sync_pad_probe(self) -> None:
+        if not ngpc_input.sdl_backend_allowed():
+            self._pad_probe = None
+            self._refresh_pad_state()
+            return
+        idx = max(0, self._pad_idx_spin.value() - 1)
+        self._pad_probe = ngpc_input.make_pad(idx)
+        self._refresh_pad_state()
+
     def _refresh_pad_state(self) -> None:
         lang = cfg.language(self._settings)
-        if not self._pad_probe.available:
+        if not ngpc_input.sdl_backend_allowed():
+            self._pad_state.setText(cfg.tr(lang, "pad_mac_bundle"))
+            return
+        self._ensure_pad_probe()
+        if self._pad_probe is None or not self._pad_probe.available:
             key = "pad_none"
         else:
             # Reading the mask is what updates `connected`; the value is discarded.
@@ -2170,13 +2232,14 @@ class SettingsPage(QWidget):
         self.changed.emit()
 
     def _on_ctrl_player(self, _idx: int) -> None:
-        """Switch the bindmap + pad-index field to the chosen player's layout."""
+        """Switch the bindmap + pad-index field to the chosen preset's layout."""
         self._ctrl_player = int(self._player_sel.currentData() or 1)
         self._bindmap.set_player(self._ctrl_player)
         self._pad_idx_spin.blockSignals(True)
         self._pad_idx_spin.setValue(
             cfg.player_pad_index(self._settings, self._ctrl_player) + 1)
         self._pad_idx_spin.blockSignals(False)
+        self._sync_pad_probe()
 
     def _restore_keys(self) -> None:
         defaults = cfg._default_keys(self._ctrl_player)
@@ -2350,8 +2413,18 @@ class SettingsPage(QWidget):
         lang = cfg.language(self._settings)
         t = lambda k: cfg.tr(lang, k)
         for i, key in enumerate(("cat_general", "cat_bios", "cat_graphics", "cat_audio",
-                                 "cat_controls", "cat_hotkeys")):
+                                 "cat_controls", "cat_hotkeys", "cat_about")):
             self._cats.item(i).setText(t(key))
+        self._about_text.setText(t("about_html").format(
+            app=app_info.APP_NAME,
+            version=app_info.APP_VERSION,
+            upstream=app_info.UPSTREAM_NAME,
+            author=app_info.UPSTREAM_AUTHOR,
+            license=app_info.UPSTREAM_LICENSE,
+            url=app_info.UPSTREAM_URL,
+            developer=app_info.FORK_DEVELOPER,
+            tagline=app_info.FORK_TAGLINE,
+        ))
         self._resume_banner.setText("▶  " + t("m_resume"))
         self._hk_intro.setText(t("hotkeys_hint"))
         self._hk_restore.setText(t("restore"))
@@ -2422,16 +2495,18 @@ class SettingsPage(QWidget):
         for label, lab in self._turbo_labels.items():
             lab.setText(t("turbo").format(btn=label))
         self._lbl_turbo_rate.setText(t("turbo_rate"))
+        self._fight_hint.setText(t("fight_hint"))
+        self._lbl_fight.setText(t("fight_mode"))
         for i, hz in enumerate(cfg.TURBO_RATES):
             self._turbo_rate.setItemText(i, t("turbo_hz").format(n=hz))
         self._pad_hint.setText(t("gamepad_hint")); self._lbl_pad.setText(t("gamepad"))
         # These two used to be a hardcoded `"Joueur" if french else "Player"` in the
         # code -- a translation no translator could ever reach, invisible to the lang
         # files, and wrong in every other language. Same route as everything else now.
-        self._lbl_player.setText(t("player"))
+        self._lbl_player.setText(t("controls_setting"))
         self._lbl_pad_idx.setText(t("pad_index"))
         for i in range(self._player_sel.count()):
-            self._player_sel.setItemText(i, t("player_n").format(n=i + 1))
+            self._player_sel.setItemText(i, t("controls_setting_n").format(n=i + 1))
         self._refresh_pad_state()
         self._refresh_conflicts()
 
@@ -2839,6 +2914,11 @@ class PlayPage(QWidget):
         self._pad_held = 0                 # controller mask, merged with `self.held`
         self._turbo_mask = 0               # joypad bits that autofire while held
         self._turbo_hz = 10
+        self._fight_input = ngpc_fight_input.FightInputMixer()
+        self._fight_mode = True
+        self._fight_bindings: dict[int, str] = {}
+        self._fight_pad_map: dict[int, str] = {}
+        self._fight_pad_prev: frozenset[int] = frozenset()
         self._frame = 0                    # free-running EMULATED frame counter
         self.pending = bytearray()
         self.watches = WatchSet()          # named memory watches, loaded per-ROM
@@ -3196,7 +3276,14 @@ class PlayPage(QWidget):
         self.machine = None
 
     def apply_settings(self) -> None:
-        self._bindings = cfg.key_bindings(self._settings, self._player)
+        self._fight_mode = cfg.fight_mode(self._settings)
+        self._fight_bindings = cfg.fight_key_bindings(self._settings, self._player)
+        self._fight_pad_map = cfg.fight_pad_bindings(self._settings, self._player)
+        if not self._fight_mode:
+            self._fight_input.reset()
+            self._fight_pad_prev = frozenset()
+        self._bindings = cfg.key_bindings(
+            self._settings, self._player, omit_ab=self._fight_mode)
         self._pad = ngpc_input.make_pad(
             cfg.player_pad_index(self._settings, self._player))
         self._hotkeys = cfg.hotkey_bindings(self._settings)
@@ -3416,6 +3503,11 @@ class PlayPage(QWidget):
             if handler is not None:
                 handler()
             return
+        if self._fight_mode:
+            slot = self._fight_bindings.get(k)
+            if slot is not None and not e.isAutoRepeat():
+                self._fight_input.trigger(slot, self._frame)
+                return
         bit = self._bindings.get(k)
         if bit and not e.isAutoRepeat():
             self.held |= bit
@@ -4599,13 +4691,25 @@ class PlayPage(QWidget):
     def _poll_pad(self) -> None:
         """Refresh the controller mask. Cheap when no pad is plugged in -- XInputPad
         rate-limits the probe itself (querying an empty slot is slow)."""
-        self._pad_held = self._pad.poll() if self._pad_on else 0
+        if self._pad_on:
+            self._pad_held = self._pad.poll()
+            if self._fight_mode and self._fight_pad_map:
+                fired, self._fight_pad_prev = ngpc_input.poll_fight_pad_edges(
+                    self._pad, self._fight_pad_prev, self._fight_pad_map)
+                for slot in fired:
+                    self._fight_input.trigger(slot, self._frame)
+        else:
+            self._pad_held = 0
+            self._fight_pad_prev = frozenset()
 
     def _joypad_byte(self) -> int:
         """What the console should see on 0xB0 for THIS frame: keyboard and
         controller merged, with the turbo-flagged buttons chopped into a press
         train. Only the low 7 bits are joypad -- 0x80 is POWER."""
         held = (self.held | self._pad_held) & 0x7F
+        if self._fight_mode:
+            held = ngpc_fight_input.strip_face_buttons(held)
+            held = self._fight_input.merge_joypad(held, self._frame)
         if self._turbo_mask:
             held = ngpc_input.apply_turbo(held, self._turbo_mask, self._frame, self._turbo_hz)
         return held & 0x7F
@@ -5669,6 +5773,12 @@ class _LinkInput(QObject):
             press = t == QEvent.Type.KeyPress
             k = e.key()
             for pg in self._pages:
+                if pg._fight_mode:            # noqa: SLF001
+                    slot = pg._fight_bindings.get(k)
+                    if slot is not None:
+                        if press:
+                            pg._fight_input.trigger(slot, pg._frame)
+                        return True
                 bit = pg._bindings.get(k)     # noqa: SLF001 -- sibling in this module
                 if bit:
                     if press:
@@ -5821,7 +5931,7 @@ class Shell(QMainWindow):
         # `cfg.protect_settings`. Reported, never silent: settings reappearing on
         # their own is nearly as confusing as losing them.
         self._settings_recovered = cfg.protect_settings(self._settings)
-        self.setWindowTitle("NgpCraft Emulator")
+        self.setWindowTitle(app_info.APP_NAME)
         if APP_ICON.is_file():
             self.setWindowIcon(QIcon(str(APP_ICON)))
         # Restore the last window size/position; fall back to a sensible default.
@@ -5850,7 +5960,8 @@ class Shell(QMainWindow):
         self._nav_text: dict[QPushButton, str] = {}   # button -> its raw label
         rlay = QVBoxLayout(rail); rlay.setContentsMargins(8, 8, 8, 12); rlay.setSpacing(4)
         head = QHBoxLayout(); head.setContentsMargins(0, 0, 0, 0)
-        self._rail_title = QLabel("◆ NgpCraft"); self._rail_title.setObjectName("appTitle")
+        self._rail_title = QLabel(f"◆ {app_info.APP_NAME}")
+        self._rail_title.setObjectName("appTitle")
         self._rail_toggle = QPushButton("‹"); self._rail_toggle.setObjectName("railToggle")
         self._rail_toggle.setFixedSize(26, 26)
         self._rail_toggle.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -5945,6 +6056,9 @@ class Shell(QMainWindow):
                     and not lbl.wordWrap() and len(lbl.text()) > 40):
                 lbl.setWordWrap(True)
         self.setMinimumSize(360, 320)
+        self.setAcceptDrops(True)
+        for w in (central, self._stack, self.library, self.settings, self.play):
+            w.setAcceptDrops(True)
         self._go(0)
         self._auto_collapsed = False
         self._toggle_rail(not bool(self._settings.value("win/rail_collapsed", False, type=bool)))
@@ -5952,6 +6066,29 @@ class Shell(QMainWindow):
         self._auto_rail()
         if rom:
             self._launch(rom)
+
+    def _handle_rom_drop(self, e: QEvent) -> bool:
+        """Accept .ngc/.ngp/.zip/.7z dragged onto the window (library or in-game)."""
+        t = e.type()
+        if t not in (QEvent.Type.DragEnter, QEvent.Type.DragMove, QEvent.Type.Drop):
+            return False
+        mime = e.mimeData()
+        if mime is None or not mime.hasUrls():
+            return False
+        paths = ngpc_rom_drop.rom_paths_from_local_urls(mime.urls())
+        if not paths:
+            return False
+        if t in (QEvent.Type.DragEnter, QEvent.Type.DragMove):
+            e.acceptProposedAction()  # type: ignore[union-attr]
+            return True
+        self._launch(str(paths[0]))
+        e.acceptProposedAction()  # type: ignore[union-attr]
+        return True
+
+    def eventFilter(self, obj, e) -> bool:  # noqa: N802
+        if self._handle_rom_drop(e):
+            return True
+        return super().eventFilter(obj, e)
 
     # ---- adapting to the screen we are actually on -----------------------
     def fit_to_screen(self) -> None:
@@ -6175,6 +6312,33 @@ class Shell(QMainWindow):
         if idx == 2 and self.play.machine is not None:
             self.play.resume_play()
         self._update_rail(idx)
+
+    def _pick_rom_at_launch(self) -> None:
+        """Packaged macOS .app with no ROM on the command line: open-file dialog."""
+        self.raise_()
+        self.activateWindow()
+        app = QApplication.instance()
+        if app is not None:
+            app.setActiveWindow(self)
+        lang = cfg.language(self._settings)
+        start = cfg.rom_folder(self._settings) or str(DEFAULT_ROM_DIR)
+        if not Path(start).is_dir():
+            start = str(Path.home())
+        dlg_opts = QFileDialog.Option.DontUseNativeDialog if (
+            getattr(sys, "frozen", False) and sys.platform == "darwin"
+        ) else QFileDialog.Option(0)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            cfg.tr(lang, "launch_pick_rom"),
+            start,
+            cfg.tr(lang, "filter_rom_files"),
+            options=dlg_opts,
+        )
+        if not path:
+            return
+        chosen = choose_game_in_archive(self, path, lang)
+        if chosen:
+            self._launch(chosen)
 
     def _launch(self, rom_str: str) -> None:
         self.library._stop_worker()          # no thumbnail core alongside the game's core
@@ -7316,8 +7480,28 @@ def stamp_taskbar_icon(win) -> bool:
         return False
 
 
+class _NgpcApplication(QApplication):
+    """macOS: Finder « Open With » / double-click .ngc sends QFileOpenEvent here."""
+
+    def __init__(self, argv: list[str]) -> None:
+        super().__init__(argv)
+        self._pending_open: str | None = None
+        self._shell: Shell | None = None
+
+    def event(self, e: QEvent) -> bool:  # noqa: N802
+        if e.type() == QEvent.Type.FileOpen:
+            path = e.file()  # type: ignore[attr-defined]
+            if path:
+                if self._shell is not None:
+                    self._shell._launch(path)
+                else:
+                    self._pending_open = path
+            return True
+        return super().event(e)
+
+
 def main() -> int:
-    app = QApplication(sys.argv[:1])
+    app = _NgpcApplication(sys.argv[:1])
     if APP_ICON.is_file():
         app.setWindowIcon(QIcon(str(APP_ICON)))
     _claim_windows_taskbar_identity()
@@ -7353,9 +7537,23 @@ def main() -> int:
     else:
         print("[timing] modele silicium (defaut). --timing legacy pour comparer.")
 
-    rom = args[0] if args else None
+    launch_rom = ngpc_rom_drop.rom_path_from_launch_args(args)
+    rom = str(launch_rom) if launch_rom else None
+    if rom is None and app._pending_open:
+        rom = app._pending_open
     shell = Shell(rom)
+    app._shell = shell
+    app.installEventFilter(shell)
     shell.show()
+    if rom is None and app._pending_open:
+        QTimer.singleShot(0, lambda: shell._launch(app._pending_open))
+        app._pending_open = None
+    elif rom is None and not app._pending_open and (
+        getattr(sys, "frozen", False)
+        or os.environ.get("NGPCRAFT_PICK_ROM", "").strip().lower() in ("1", "true", "yes")
+    ):
+        # Double-click the .app (no argv): open-file dialog after the window is frontmost.
+        QTimer.singleShot(400, shell._pick_rom_at_launch)
     # AFTER show(): the property store needs a real HWND, which winId only has once the
     # window exists. This is what puts our picture on the taskbar button (see above).
     stamp_taskbar_icon(shell)

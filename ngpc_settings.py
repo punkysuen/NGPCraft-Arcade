@@ -567,14 +567,22 @@ def theme(s: QSettings) -> str:
     return val if val in dict(th.THEMES) else th.THEME_SYSTEM
 
 
-def key_bindings(s: QSettings, player: int = 1) -> dict[int, int]:
+def key_bindings(
+    s: QSettings,
+    player: int = 1,
+    *,
+    omit_ab: bool = False,
+) -> dict[int, int]:
     """{Qt key code -> joypad mask} for `player`, from settings or defaults.
 
     Player 1 reads the legacy `input/<label>` keys (unchanged); player 2+ read
-    `input/p<N>/<label>`."""
+    `input/p<N>/<label>`. With `omit_ab`, A/B bindings are dropped so fight
+    macros own the face buttons."""
     defaults = _default_keys(player)
     out: dict[int, int] = {}
     for label, mask in JOYPAD_BUTTONS:
+        if omit_ab and mask in (0x10, 0x20):
+            continue
         code = int(s.value(_binding_key(label, player), defaults.get(label, 0), type=int))
         if code:
             out[code] = mask
@@ -614,6 +622,83 @@ def turbo_mask(s: QSettings) -> int:
     for label in TURBO_BUTTONS:
         if turbo_on(s, label):
             out |= masks.get(label, 0)
+    return out
+
+
+# --- fight (four-button timing macros for NGPC fighters) ------------------
+FIGHT_BUTTONS: tuple[str, ...] = ("A", "B", "C", "D")
+
+DEFAULT_FIGHT_KEYS: dict[str, int] = {
+    "A": int(Qt.Key.Key_J),
+    "B": int(Qt.Key.Key_K),
+    "C": int(Qt.Key.Key_U),
+    "D": int(Qt.Key.Key_I),
+}
+
+# PyQt6 has no Key_Keypad* enum; P2 uses keys clear of P1 (J/K/U/I) and P2 d-pad (WASD).
+DEFAULT_FIGHT_KEYS_P2: dict[str, int] = {
+    "A": int(Qt.Key.Key_Y),
+    "B": int(Qt.Key.Key_T),
+    "C": int(Qt.Key.Key_O),
+    "D": int(Qt.Key.Key_P),
+}
+
+
+def _fight_binding_key(label: str, player: int) -> str:
+    if player <= 1:
+        return f"input/fight/{label}"
+    return f"input/p{player}/fight/{label}"
+
+
+def fight_mode(s: QSettings) -> bool:
+    """When on, keyboard/gamepad A/B are replaced by timed fight macros."""
+    return bool(s.value("input/fight_mode", True, type=bool))
+
+
+def set_fight_mode(s: QSettings, on: bool) -> None:
+    s.setValue("input/fight_mode", bool(on))
+
+
+def fight_key_bindings(s: QSettings, player: int = 1) -> dict[int, str]:
+    """{Qt key code -> fight slot 'a'|'b'|'c'|'d'} for the given player."""
+    defaults = DEFAULT_FIGHT_KEYS if player <= 1 else DEFAULT_FIGHT_KEYS_P2
+    slot_map = {"A": "a", "B": "b", "C": "c", "D": "d"}
+    out: dict[int, str] = {}
+    for label in FIGHT_BUTTONS:
+        code = int(s.value(_fight_binding_key(label, player), defaults[label], type=int))
+        if code:
+            out[code] = slot_map[label]
+    return out
+
+
+# Gamepad fight buttons use SDL game-controller indices (pygame CONTROLLER_BUTTON_*):
+# 0=A, 1=B, 2=X, 3=Y on Xbox / most mapped pads.
+DEFAULT_FIGHT_PAD_BUTTONS: dict[str, int] = {
+    "A": 0,   # light punch
+    "B": 1,   # light kick
+    "C": 2,   # heavy punch
+    "D": 3,   # heavy kick
+}
+
+
+def _fight_pad_binding_key(label: str, player: int) -> str:
+    if player <= 1:
+        return f"input/fight_pad/{label}"
+    return f"input/p{player}/fight_pad/{label}"
+
+
+def fight_pad_bindings(s: QSettings, player: int = 1) -> dict[int, str]:
+    """{SDL controller button index -> fight slot 'a'|'b'|'c'|'d'}."""
+    slot_map = {"A": "a", "B": "b", "C": "c", "D": "d"}
+    out: dict[int, str] = {}
+    for label in FIGHT_BUTTONS:
+        idx = int(s.value(
+            _fight_pad_binding_key(label, player),
+            DEFAULT_FIGHT_PAD_BUTTONS[label],
+            type=int,
+        ))
+        if idx >= 0:
+            out[idx] = slot_map[label]
     return out
 
 

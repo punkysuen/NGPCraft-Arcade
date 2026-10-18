@@ -156,6 +156,28 @@ class XInputPad:
         self._mask = mask
         return mask
 
+    def fight_button_mask(self) -> frozenset[int]:
+        """Pressed face buttons as SDL-style indices (0=A, 1=B, 2=X, 3=Y)."""
+        if self._dll is None or not self._connected:
+            return frozenset()
+        state = _XInputState()
+        try:
+            if self._dll.XInputGetState(self._index, ctypes.byref(state)) != 0:
+                return frozenset()
+        except OSError:
+            return frozenset()
+        pad = state.Gamepad
+        out: set[int] = set()
+        if pad.wButtons & _XI_A:
+            out.add(0)
+        if pad.wButtons & _XI_B:
+            out.add(1)
+        if pad.wButtons & _XI_X:
+            out.add(2)
+        if pad.wButtons & _XI_Y:
+            out.add(3)
+        return frozenset(out)
+
 
 # --------------------------------------------------------------- SDL2 pad
 # XInput is Windows + Xbox-only. SDL2 (via pygame) is the cross-platform standard
@@ -165,23 +187,36 @@ class XInputPad:
 _sdl_state = {"tried": False, "ok": False}
 
 
+def sdl_backend_allowed() -> bool:
+    """PyInstaller macOS .app: bundled libSDL2 aborts in dyld before Python can catch it."""
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        return False
+    return True
+
+
 def _sdl_init() -> bool:
     """Initialise SDL's joystick/controller subsystems ONCE, without a window and
     WITHOUT grabbing the audio device (Qt owns audio). Returns True on success."""
     if _sdl_state["tried"]:
         return _sdl_state["ok"]
     _sdl_state["tried"] = True
+    if not sdl_backend_allowed():
+        _sdl_state["ok"] = False
+        return False
     try:
         import os
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")   # no window
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")   # do not take the sound card
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")   # no banner on import
         import pygame
-        pygame.display.init()          # the event pump needs a (dummy) video system
+        try:
+            pygame.display.init()      # event pump; dummy video driver on macOS bundle
+        except Exception:
+            pass
         pygame.joystick.init()
         from pygame._sdl2 import controller
         controller.init()
-        _sdl_state["ok"] = True
+        _sdl_state["ok"] = pygame.joystick.get_init() and controller.get_init()
     except Exception:
         _sdl_state["ok"] = False
     return _sdl_state["ok"]
@@ -261,6 +296,37 @@ class SdlPad:
             mask &= ~(UP | DOWN)
         return mask
 
+    def fight_button_mask(self) -> frozenset[int]:
+        """Pressed buttons as SDL game-controller indices (0–14)."""
+        if not self._ok:
+            return frozenset()
+        import pygame as pg
+        try:
+            pg.event.pump()
+        except Exception:
+            return frozenset()
+        if self._ctrl is None and self._js is None:
+            if not self._connected and time.monotonic() < self._next_probe:
+                return frozenset()
+            if not self._open():
+                return frozenset()
+        try:
+            if self._ctrl is not None:
+                c = self._ctrl
+                return frozenset(
+                    i for i in range(16)
+                    if c.get_button(i)
+                )
+            j = self._js
+            nb = j.get_numbuttons()
+            return frozenset(i for i in range(min(nb, 16)) if j.get_button(i))
+        except Exception:
+            self._ctrl = self._js = None
+            self._connected = False
+            self._next_probe = time.monotonic() + _RETRY_SECONDS
+            return frozenset()
+
+
     def _read_controller(self) -> int:
         import pygame as pg
         c = self._ctrl
@@ -313,9 +379,28 @@ class SdlPad:
         return mask
 
 
+def poll_fight_pad_edges(
+    pad,
+    prev: frozenset[int],
+    bindings: dict[int, str],
+) -> tuple[list[str], frozenset[int]]:
+    """Return fight slots newly pressed this poll and the current button set."""
+    if not bindings or not hasattr(pad, "fight_button_mask"):
+        return [], frozenset()
+    now = pad.fight_button_mask()
+    fired = [
+        bindings[b]
+        for b in now
+        if b not in prev and b in bindings
+    ]
+    return fired, now
+
+
 def make_pad(index: int = 0):
     """The controller for player `index` (0 = P1, 1 = P2). Prefers SDL2 (all OSes,
     most brands); falls back to XInput on Windows, and to an inert pad otherwise."""
+    if not sdl_backend_allowed():
+        return XInputPad(index)
     p = SdlPad(index)
     if p.available:
         return p

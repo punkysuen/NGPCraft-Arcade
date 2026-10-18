@@ -7,62 +7,83 @@
 
 import sys
 
+from PyInstaller.utils.hooks import collect_all
+
 # The native core keeps the same stem on every OS (CMake strips the `lib` prefix);
 # only the extension changes. This MUST match core.native._DLL_NAME.
 if sys.platform == "win32":
     _CORE = "ngpc_core.dll"
     _ICON = "assets/icone_ngpcraft.ico"
+    _EXE_NAME = "NgpCraftEmulator"
+    _APP_BUNDLE = None
+    _BUNDLE_ID = "com.ngpcraft.emulator"
 elif sys.platform == "darwin":
     _CORE = "ngpc_core.dylib"
-    # A .icns if one is checked in, else no icon (PyInstaller ignores a missing one
-    # only if it is None -- a missing path would error, so gate on the file).
     import os
     _ICON = "assets/icone_ngpcraft.icns" if os.path.exists(
-        "assets/icone_ngpcraft.icns") else None
+        "assets/icone_ngpcraft.icns") else "assets/icone_ngpcraft.ico"
+    _EXE_NAME = "NGPCraftArcade"
+    _APP_BUNDLE = "NGPCraft Arcade.app"
+    _BUNDLE_ID = "com.ngpcraft.arcade"
+    _DOC_TYPES = [
+        {
+            "CFBundleTypeName": "Neo Geo Pocket ROM",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Owner",
+            "CFBundleTypeExtensions": ["ngc", "ngp", "zip", "7z"],
+        },
+    ]
 else:
     _CORE = "ngpc_core.so"
-    _ICON = None                       # Linux desktop icons come from a .desktop file
+    _ICON = None
+    _EXE_NAME = "NgpCraftEmulator"
+    _APP_BUNDLE = None
+    _BUNDLE_ID = "com.ngpcraft.emulator"
 
-# UPX shrinks the Windows build; on macOS it breaks code signing and on Linux it
-# buys little for the risk, so keep it to Windows only.
 _UPX = sys.platform == "win32"
 
+_datas = [
+    (f"cpp/build/{_CORE}", "cpp/build"),
+    ("hle_bios/bios_hle.bin", "hle_bios"),
+    ("assets/icone_ngpcraft.ico", "assets"),
+    ("assets/ngpc_console.png", "assets"),
+    ("lang", "lang"),
+]
+_binaries = []
+_hidden = []
+_runtime_hooks = []
+
+# PyQt6 needs plugins + Qt frameworks in the bundle (macOS cocoa crash without this).
+_pyqt_datas, _pyqt_binaries, _pyqt_hidden = collect_all("PyQt6")
+_datas += _pyqt_datas
+_binaries += _pyqt_binaries
+_hidden += _pyqt_hidden
+
+if sys.platform == "darwin":
+    _runtime_hooks.append("pyi_rth_qt6_plugins.py")
+else:
+    _DOC_TYPES = None
+
+# macOS .app: do not bundle pygame/SDL (libSDL2 aborts at load time inside the bundle).
+_excludes = ["pygame"] if sys.platform == "darwin" else []
 
 a = Analysis(
-    ['ngpc_shell.py'],
+    ["ngpc_shell.py"],
     pathex=[],
-    binaries=[],
-    # Every runtime resource must be listed here: PyInstaller follows IMPORTS, not
-    # file reads, so an asset opened by path is invisible to it and simply goes
-    # missing from the build.
-    # 'lang' is a whole directory on purpose: languages are discovered by
-    # globbing it at import time, so a new lang/pt.json must ship with no edit
-    # here either -- naming the files one by one would silently drop it.
-    datas=[(f'cpp/build/{_CORE}', 'cpp/build'),
-           # The clean-room HLE BIOS: without it the packaged app has NO BIOS at
-           # all and "no bios.bin needed" — the README's first promise — is not
-           # true of the thing people download. It was missing here for months.
-           ('hle_bios/bios_hle.bin', 'hle_bios'),
-           ('assets/icone_ngpcraft.ico', 'assets'),
-           ('assets/ngpc_console.png', 'assets'),
-           ('lang', 'lang')],
-    hiddenimports=[],
+    binaries=_binaries,
+    datas=_datas,
+    hiddenimports=_hidden,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
+    runtime_hooks=_runtime_hooks,
+    excludes=_excludes,
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.datas,
-    [],
-    name='NgpCraftEmulator',
+_common_exe_kw = dict(
+    name=_EXE_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -71,19 +92,52 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=[_ICON] if _ICON else None,
 )
 
-# macOS wants an application bundle, not a bare Unix executable, or Finder and the
-# Dock treat it as a terminal tool. The EXE above is what goes inside it.
-if sys.platform == "darwin":
-    app = BUNDLE(
+if sys.platform == "darwin" and _APP_BUNDLE:
+    # Onedir .app: avoids ~10s onefile extract on every launch.
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        argv_emulation=True,
+        **_common_exe_kw,
+    )
+    coll = COLLECT(
         exe,
-        name='NgpCraftEmulator.app',
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=False,
+        name=_EXE_NAME,
+    )
+    _plist = {
+        "CFBundleName": "NGPCraft Arcade",
+        "CFBundleDisplayName": "NGPCraft Arcade",
+        "CFBundleShortVersionString": "0.1.0",
+        "NSHighResolutionCapable": True,
+    }
+    if _DOC_TYPES:
+        _plist["CFBundleDocumentTypes"] = _DOC_TYPES
+    app = BUNDLE(
+        coll,
+        name=_APP_BUNDLE,
         icon=_ICON,
-        bundle_identifier='com.ngpcraft.emulator',
+        bundle_identifier=_BUNDLE_ID,
+        info_plist=_plist,
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        argv_emulation=False,
+        **_common_exe_kw,
     )

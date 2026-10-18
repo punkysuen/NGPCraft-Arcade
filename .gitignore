@@ -1,3 +1,11 @@
+# macOS / local noise
+.DS_Store
+**/.DS_Store
+/assets/icone_ngpcraft.iconset/
+/cpp/build/ngpc_core.dylib
+/settings_backup *.ini
+/settings_backup.prev *.ini
+
 # Python
 __pycache__/
 *.py[cod]
