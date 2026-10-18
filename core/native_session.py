@@ -63,10 +63,22 @@ CYCLES_PER_FRAME = CYCLES_PER_SCANLINE * SCANLINES_PER_FRAME
 # format either way, and copying it next to a ROM is all another emulator needs.
 # Frozen into a single .exe, this must sit BESIDE the .exe (writable, persistent) --
 # never under sys._MEIPASS, whose extraction dir is wiped when the process exits.
-if getattr(sys, "frozen", False):
-    SAVE_DIR = Path(sys.executable).resolve().parent / "saves"
-else:
-    SAVE_DIR = Path(__file__).resolve().parent.parent / "saves"
+def _writable_data_root() -> Path:
+    try:
+        import ngpc_app_info as ai
+        return ai.writable_data_root()
+    except ImportError:
+        pass
+    import os
+    repo = os.environ.get("NGPCRAFT_REPO_ROOT", "").strip()
+    if repo:
+        return Path(repo)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+SAVE_DIR = _writable_data_root() / "saves"
 
 
 def default_save_path(rom_path: Path) -> Path:

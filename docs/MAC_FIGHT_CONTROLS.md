@@ -10,12 +10,12 @@ NGPC 格鬥遊戲只有 **A / B** 兩顆面鍵，遊戲以 **按住 A 或 B 的�
 |--------|----------------|------|----------|
 | A | A 鍵 | 0.1 秒 | 輕拳 |
 | B | B 鍵 | 0.1 秒 | 輕腳 |
-| C | A 鍵 | 0.6 秒 | 重拳 |
-| D | B 鍵 | 0.6 秒 | 重腳 |
+| C | A 鍵 | 至少 ~0.17 秒（10 幀）；**可按住更久** | 重拳／蓄力 |
+| D | B 鍵 | 至少 ~0.17 秒（10 幀）；**可按住更久** | 重腳／蓄力 |
 
 （NGPC 沒有第三顆面鍵；D 對應 **長按 B**，非「原 D 鍵」。）
 
-時長以 **模擬幀數** 計算（約 60 Hz）：輕攻擊 3 幀、重攻擊 36 幀，避免追帧時短按被誤判為長按。
+時長以 **模擬幀數** 計算（約 60 Hz）：輕攻擊 A/B 固定 3 幀。**C/D** 快按仍保證至少 **10 幀**（約 0.17 秒）才放開 A/B 線，方便連續重攻；需要蓄力超必殺時可 **一直按住 C/D**，放開才結束。常數 `HEAVY_FRAMES`（`ngpc_fight_input.py`）可依實機手感再調。
 
 ## 預設鍵位（玩家 1）
 
@@ -66,11 +66,21 @@ python3 -c "from PyQt6.QtWidgets import QApplication; import sys; QApplication(s
 
 會產生 `dist/NgpCraftEmulator.app`，並複製到 **桌面**。第一次開啟若 macOS 阻擋未簽名 app：**右鍵 → 打開**。
 
-**雙擊 `.app`** 且未從指令列指定 ROM 時，會先跳出 **Finder 選檔視窗**（`.ngc` / `.ngp`）；取消則進入遊戲庫。開發模式 `python3 ngpc_shell.py` 預設仍直接進遊戲庫；若要測試選檔：`NGPCRAFT_PICK_ROM=1 python3 ngpc_shell.py`。
+**雙擊 `.app`**（未帶 ROM）時才會跳出 **Finder 選檔視窗**；**把 ROM 拖到 `.app` 圖示**或「用此 App 開啟」會直接進遊戲，不會再彈選檔。取消選檔則進入遊戲庫。開發模式 `python3 ngpc_shell.py` 預設直接進遊戲庫；測試選檔：`NGPCRAFT_PICK_ROM=1 python3 ngpc_shell.py`。
+
+## 使用者資料位置（macOS .app）
+
+內嵌版 `.app` 的存檔、備份設定、縮圖快取等寫入：
+
+`~/Library/Application Support/NGPCraft Arcade/`
+
+（不再在桌面／`.app` 旁產生 `settings_backup.ini` 等檔案。若你曾用舊版在 `.app` 旁留下資料，首次啟動新版本會**複製**到上述資料夾。若要恢復舊行為，可在啟動前設定環境變數 `NGPCRAFT_REPO_ROOT` 指向要使用的資料夾。）
+
+一般設定（未開可攜模式）仍由 macOS 的 `QSettings` 儲存；可攜模式的 `config.ini` 則在 Application Support 內。
 
 ## 放入 ROM 的方式
 
-1. **`roms/` 資料夾**（與 `.app` 同層，或開發時在專案 `roms/`）
+1. **Application Support 內的 `roms/`**（或開發時在專案 `roms/`）
 2. **設定 → 遊戲庫** 指定資料夾
 3. **拖放**：把 **`.ngc` / `.ngp`**（或 `.zip` / `.7z` 壓縮包）拖到模擬器視窗（遊戲庫或遊戲中皆可），會直接開始該 ROM  
    （副檔名須為 `.ngc` / `.ngp`，不是 `.npc`）

@@ -119,7 +119,7 @@ if sys.platform == "darwin" and _APP_BUNDLE:
     _plist = {
         "CFBundleName": "NGPCraft Arcade",
         "CFBundleDisplayName": "NGPCraft Arcade",
-        "CFBundleShortVersionString": "0.1.0",
+        "CFBundleShortVersionString": "0.5.0",
         "NSHighResolutionCapable": True,
     }
     if _DOC_TYPES:

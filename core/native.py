@@ -111,10 +111,18 @@ else:
     _DLL_NAME = "ngpc_core.so"
 # Frozen (PyInstaller): the DLL is bundled at cpp/build/ under the extraction root
 # (sys._MEIPASS). From source it sits at <repo>/cpp/build/ next to this package.
-if getattr(sys, "frozen", False):
-    _DEFAULT_DLL = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent)) / "cpp" / "build" / _DLL_NAME
-else:
-    _DEFAULT_DLL = Path(__file__).resolve().parent.parent / "cpp" / "build" / _DLL_NAME
+def _default_dll_path() -> Path:
+    import os
+    app_root = os.environ.get("NGPCRAFT_APP_ROOT", "").strip()
+    if app_root:
+        return Path(app_root) / "cpp" / "build" / _DLL_NAME
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return base / "cpp" / "build" / _DLL_NAME
+    return Path(__file__).resolve().parent.parent / "cpp" / "build" / _DLL_NAME
+
+
+_DEFAULT_DLL = _default_dll_path()
 
 
 class NativeCoreUnavailable(RuntimeError):

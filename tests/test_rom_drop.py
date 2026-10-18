@@ -47,17 +47,36 @@ class RomDropTests(unittest.TestCase):
             self.assertIsNone(rom_path_from_launch_args(["--timing", "legacy"]))
 
     def test_mac_bundle_skips_sdl(self) -> None:
+        import os
         import sys
         old = getattr(sys, "frozen", False)
+        old_mac = os.environ.get("NGPCRAFT_MAC_APP")
         try:
+            os.environ.pop("NGPCRAFT_MAC_APP", None)
             sys.frozen = True  # type: ignore[attr-defined]
             if sys.platform == "darwin":
                 self.assertFalse(ngpc_input.sdl_backend_allowed())
         finally:
+            if old_mac is None:
+                os.environ.pop("NGPCRAFT_MAC_APP", None)
+            else:
+                os.environ["NGPCRAFT_MAC_APP"] = old_mac
             if old:
                 sys.frozen = True  # type: ignore[attr-defined]
             elif hasattr(sys, "frozen"):
                 del sys.frozen  # type: ignore[attr-defined]
+
+    def test_mac_embedded_allows_sdl(self) -> None:
+        import os
+        old = os.environ.get("NGPCRAFT_MAC_APP")
+        try:
+            os.environ["NGPCRAFT_MAC_APP"] = "1"
+            self.assertTrue(ngpc_input.sdl_backend_allowed())
+        finally:
+            if old is None:
+                os.environ.pop("NGPCRAFT_MAC_APP", None)
+            else:
+                os.environ["NGPCRAFT_MAC_APP"] = old
 
 
 if __name__ == "__main__":

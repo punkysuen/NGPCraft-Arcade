@@ -190,6 +190,12 @@ _sdl_state = {"tried": False, "ok": False}
 def sdl_backend_allowed() -> bool:
     """PyInstaller macOS .app: bundled libSDL2 aborts in dyld before Python can catch it."""
     if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        try:
+            from ngpc_app_info import is_mac_embedded_app
+            if is_mac_embedded_app():
+                return True
+        except ImportError:
+            pass
         return False
     return True
 
@@ -252,18 +258,30 @@ class SdlPad:
         import pygame
         from pygame._sdl2 import controller
         try:
-            if controller.get_count() > self._index:
+            n_ctrl = controller.get_count()
+            if n_ctrl > self._index:
                 if controller.is_controller(self._index):
                     self._ctrl = controller.Controller(self._index)
+                    self._js = None
                     self._connected = True
                     return True
-                # no standard mapping -> raw joystick fallback
+                # Mapped slot exists but is not a GameController mapping — raw joystick.
+                self._ctrl = None
+                self._js = pygame.joystick.Joystick(self._index)
+                self._js.init()
+                self._connected = True
+                return True
+            # Some macOS pads appear only in the joystick list (no mapping DB entry).
+            n_js = pygame.joystick.get_count()
+            if n_js > self._index:
+                self._ctrl = None
                 self._js = pygame.joystick.Joystick(self._index)
                 self._js.init()
                 self._connected = True
                 return True
         except Exception:
             pass
+        self._ctrl = self._js = None
         self._connected = False
         self._next_probe = time.monotonic() + _RETRY_SECONDS
         return False

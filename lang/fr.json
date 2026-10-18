@@ -126,6 +126,7 @@
  "m_audio": "Audio",
  "m_controls": "Commandes",
  "m_debug": "Outils debug",
+ "m_about": "À propos",
  "m_loadstate": "Charger l'état (empl. {n})",
  "m_quit": "Retour à la bibliothèque",
  "m_reset": "Réinitialiser",

@@ -48,13 +48,16 @@ class Library:
     write is atomic -- a torn `library.json` would lose the whole history.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, persist: bool = True) -> None:
         self.path = Path(path)
+        self._persist = bool(persist)
         self._data: dict[str, dict] = {}
         self.load()
 
     # ---- persistence ----------------------------------------------------
     def load(self) -> None:
+        if not self._persist:
+            return
         try:
             raw = json.loads(self.path.read_text("utf-8"))
         except (OSError, ValueError):
@@ -67,6 +70,8 @@ class Library:
                     self._data[str(key)] = {**_EMPTY, **ent}
 
     def save(self) -> None:
+        if not self._persist:
+            return
         payload = {"version": 1, "games": self._data}
         tmp = self.path.with_suffix(".json.tmp")
         try:

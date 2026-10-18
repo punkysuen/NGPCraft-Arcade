@@ -13,7 +13,9 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal
+from collections.abc import Callable
+
+from PyQt6.QtCore import Qt, QSettings, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import QPushButton
 
@@ -67,8 +69,16 @@ CONFIG_FILENAME = "config.ini"
 
 
 def _app_dir() -> Path:
-    """Folder the emulator lives in: next to the exe when frozen, else this module."""
-    if getattr(sys, "frozen", False):            # PyInstaller / frozen build
+    """Folder for portable config + settings backups (see ngpc_app_info.writable_data_root)."""
+    try:
+        import ngpc_app_info as ai
+        return ai.writable_data_root()
+    except ImportError:
+        pass
+    repo = os.environ.get("NGPCRAFT_REPO_ROOT", "").strip()
+    if repo:
+        return Path(repo)
+    if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
@@ -659,6 +669,23 @@ def set_fight_mode(s: QSettings, on: bool) -> None:
     s.setValue("input/fight_mode", bool(on))
 
 
+def set_fight_binding(s: QSettings, label: str, code: int, player: int = 1) -> None:
+    s.setValue(_fight_binding_key(label, player), int(code))
+
+
+def set_fight_pad_binding(s: QSettings, label: str, button_index: int, player: int = 1) -> None:
+    s.setValue(_fight_pad_binding_key(label, player), int(max(-1, button_index)))
+
+
+def fight_pad_button_index(s: QSettings, label: str, player: int = 1) -> int:
+    defaults = DEFAULT_FIGHT_PAD_BUTTONS
+    return int(s.value(
+        _fight_pad_binding_key(label, player),
+        defaults[label],
+        type=int,
+    ))
+
+
 def fight_key_bindings(s: QSettings, player: int = 1) -> dict[int, str]:
     """{Qt key code -> fight slot 'a'|'b'|'c'|'d'} for the given player."""
     defaults = DEFAULT_FIGHT_KEYS if player <= 1 else DEFAULT_FIGHT_KEYS_P2
@@ -856,6 +883,80 @@ class KeyCaptureButton(QPushButton):
             self._render()
             if changed:
                 self.captured.emit(self._key)   # persist the NEW code (see class docstring)
+            return
+        super().keyPressEvent(event)
+
+
+class PadCaptureButton(QPushButton):
+    """Click -> poll the gamepad -> the next newly pressed SDL button index is saved."""
+
+    captured = pyqtSignal(int)
+
+    def __init__(self, button_index: int, *, label_fmt: str = "#{n}") -> None:
+        super().__init__()
+        self._index = int(button_index)
+        self._label_fmt = label_fmt
+        self._prompt = "press a pad button…"
+        self._grabbing = False
+        self._prev_grab: frozenset[int] = frozenset()
+        self._poller: Callable[[], frozenset[int]] | None = None
+        self._grab_timer = QTimer(self)
+        self._grab_timer.setInterval(30)
+        self._grab_timer.timeout.connect(self._poll_grab)
+        self._render()
+        self.clicked.connect(self._begin)
+
+    def set_poller(self, poller: Callable[[], frozenset[int]] | None) -> None:
+        self._poller = poller
+
+    def set_label_format(self, label_fmt: str) -> None:
+        self._label_fmt = label_fmt
+        if not self._grabbing:
+            self._render()
+
+    def set_prompt(self, prompt: str) -> None:
+        self._prompt = prompt
+
+    def button_index(self) -> int:
+        return self._index
+
+    def set_button_index(self, button_index: int) -> None:
+        self._index = int(button_index)
+        if not self._grabbing:
+            self._render()
+
+    def _render(self) -> None:
+        if self._index < 0:
+            self.setText("—")
+        else:
+            self.setText(self._label_fmt.format(n=self._index))
+
+    def _begin(self) -> None:
+        self._grabbing = True
+        self.setText(self._prompt)
+        self.setFocus()
+        self._prev_grab = self._poller() if self._poller else frozenset()
+        self._grab_timer.start()
+
+    def _poll_grab(self) -> None:
+        if not self._grabbing or not self._poller:
+            return
+        now = self._poller()
+        new = now - self._prev_grab
+        self._prev_grab = now
+        if not new:
+            return
+        self._index = min(new)
+        self._grabbing = False
+        self._grab_timer.stop()
+        self._render()
+        self.captured.emit(self._index)
+
+    def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if self._grabbing and event.key() == int(Qt.Key.Key_Escape):
+            self._grabbing = False
+            self._grab_timer.stop()
+            self._render()
             return
         super().keyPressEvent(event)
 

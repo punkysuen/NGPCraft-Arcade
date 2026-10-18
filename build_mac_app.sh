@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build NGPCraft Arcade.app for macOS (double-clickable in Finder).
+# Build NGPCraft Arcade.app via PyInstaller (no pygame on macOS — use build_mac_embedded_app.sh).
 #
 # Usage:
 #   ./build_mac_app.sh              -> dist/NGPCraft Arcade.app
