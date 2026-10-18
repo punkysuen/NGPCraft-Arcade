@@ -9,7 +9,7 @@ You must supply your own legally obtained **ROM** and optional **BIOS** files.
 
 | Platform | Notes |
 |----------|--------|
-| **Windows** | Unzip and run `NgpCraftEmulator.exe`. Saves and data sit next to the exe. |
+| **Windows 10+** | Unzip and run `NgpCraftEmulator.exe`. Saves and data sit next to the exe. |
 | **macOS 12+** | Use the embedded `.app` when provided, or build locally (below). User data: `~/Library/Application Support/NGPCraft Arcade/`. First launch of an unsigned app: **Right-click → Open**. |
 
 ## Quick start

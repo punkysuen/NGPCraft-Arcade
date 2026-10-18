@@ -5,7 +5,7 @@ Single codebase, two desktop builds. Based on [NgpCraft Emulator](https://github
 | Platform | Download | Build | User data |
 |----------|----------|-------|-----------|
 | **macOS 12+** | [Releases](https://github.com/punkysuen/NGPCraft-Arcade/releases) (embedded `.app` when attached) | `./build_mac_embedded_app.sh` | `~/Library/Application Support/NGPCraft Arcade/` |
-| **Windows** | [Releases](https://github.com/punkysuen/NGPCraft-Arcade/releases) — `NGPCraft-Arcade-v*-Windows.zip` | PyInstaller — see [WINDOWS_DEVELOPMENT.md](WINDOWS_DEVELOPMENT.md) | Beside `NgpCraftEmulator.exe` (portable layout) |
+| **Windows 10+** | [Releases](https://github.com/punkysuen/NGPCraft-Arcade/releases) — `NGPCraft-Arcade-v*-Windows.zip` | PyInstaller — see [WINDOWS_DEVELOPMENT.md](WINDOWS_DEVELOPMENT.md) | Beside `NgpCraftEmulator.exe` (portable layout) |
 
 ## Shared features (both platforms)
 
