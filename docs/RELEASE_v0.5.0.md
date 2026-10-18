@@ -1,6 +1,9 @@
-# NGPCraft Arcade v0.5.0 — macOS edition
+# NGPCraft Arcade v0.5.0 — macOS & Windows
 
-**NGPCraft Arcade** is a macOS-focused fork of [NgpCraft Emulator](https://github.com/Tixul/Ngpcraft_emulator) (MIT). This release targets Neo Geo Pocket / Color fighting games with MVS-style four-button timing, drag-and-drop ROM launch, and SDL gamepad support inside an embedded-Python `.app`.
+**NGPCraft Arcade** is a fork of [NgpCraft Emulator](https://github.com/Tixul/Ngpcraft_emulator) (MIT) for **macOS and Windows**, focused on Neo Geo Pocket / Color fighting games with MVS-style four-button timing, drag-and-drop ROM launch, and gamepad support.
+
+**Windows:** download **`NGPCraft-Arcade-v0.5.0-Windows.zip`** from [Releases](https://github.com/punkysuen/NGPCraft-Arcade/releases/tag/v0.5.0).  
+**macOS:** build with `./build_mac_embedded_app.sh` or use a macOS zip when attached to the same release.
 
 ## Requirements
 

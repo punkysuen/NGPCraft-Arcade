@@ -1,6 +1,9 @@
 
 # NgpCraft Emulator
 
+> **NGPCraft Arcade (Suen Kin fork)** — same emulator, **macOS + Windows** builds with MVS-style fight ABCD, unified on branch **`main`**.  
+> Downloads: [github.com/punkysuen/NGPCraft-Arcade/releases](https://github.com/punkysuen/NGPCraft-Arcade/releases) · Guide: [docs/NGPCRAFT_ARCADE.md](docs/NGPCRAFT_ARCADE.md)
+
 A **Neo Geo Pocket / Neo Geo Pocket Color** emulator: a fast native C++ core
 (TLCS-900H + Z80 + K2GE video) driven by a PyQt6 desktop shell.
 

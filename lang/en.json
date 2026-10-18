@@ -254,7 +254,7 @@
  "open_rom_pick": "Open ROM",
  "launch_pick_rom": "Choose a Neo Geo Pocket ROM (.ngc / .ngp)",
  "cat_about": "About",
- "about_html": "<p><b>{app}</b> — version {version}</p><p><b>Contributors</b><br/>• {author} — original <a href=\"{url}\">{upstream}</a> ({license})<br/>• {developer} — {app} edition ({copyright_holder})</p><p>{tagline}</p><p><b>macOS</b>: requires {macos_min} ({macos_name}) or later (see app bundle Info.plist).</p><p>Neo Geo Pocket is a trademark of SNK; this project is not affiliated with SNK. No copyrighted ROMs or BIOS are included.</p>",
+ "about_html": "<p><b>{app}</b> — version {version}</p><p><b>Contributors</b><br/>• {author} — original <a href=\"{url}\">{upstream}</a> ({license})<br/>• {developer} — {app} edition ({copyright_holder})</p><p>{tagline}</p><p><b>macOS</b>: requires {macos_min} ({macos_name}) or later. <b>Windows</b>: see GitHub Releases for the zip build.</p><p>Neo Geo Pocket is a trademark of SNK; this project is not affiliated with SNK. No copyrighted ROMs or BIOS are included.</p>",
  "archive_pick_title": "Choose a game",
  "archive_pick_label": "{archive} holds several games — which one?",
  "filter_text_files": "Text (*.txt)",

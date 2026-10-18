@@ -28,8 +28,8 @@ UPSTREAM_LICENSE = "MIT License"
 FORK_DEVELOPER = "Suen Kin"
 FORK_COPYRIGHT_HOLDER = "Suen Kin"
 FORK_TAGLINE = (
-    "macOS edition with MVS-style ABCD fight controls, drag-and-drop ROM, "
-    "and Finder pick on launch."
+    "macOS & Windows edition with MVS-style ABCD fight controls, "
+    "drag-and-drop ROM, and gamepad support."
 )
 
 # Play counts / favourites stay in RAM only — no library.json beside the .app.

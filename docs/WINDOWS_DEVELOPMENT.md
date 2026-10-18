@@ -1,26 +1,23 @@
-# Windows edition — development branch
+# Windows — build & test
 
-This document is for the **`windows-edition`** branch: packaging and testing **NGPCraft Arcade** on Windows while macOS work continues on `main`.
+NGPCraft Arcade shares **`main`** with the macOS edition. This file covers Windows-only packaging.
 
-## Clone on your Windows PC
+## Clone
 
 ```powershell
 git clone https://github.com/punkysuen/NGPCraft-Arcade.git
 cd NGPCraft-Arcade
-git fetch origin
-git checkout windows-edition
+git checkout main
+git pull origin main
 ```
 
-Open this folder in **Cursor** (separate workspace from your Mac — chat history stays on each machine; use Git and this file for shared context).
+## Prerequisites
 
-## Prerequisites (Windows)
-
-- [Git for Windows](https://gitforwindows.org/)
-- **Python 3.11 or 3.12** (64-bit) — matches GitHub Actions
-- **Visual Studio Build Tools** or VS with “Desktop development with C++” (for `ngpc_core.dll`)
+- Git, **Python 3.11 or 3.12** (64-bit)
+- **Visual Studio Build Tools** (Desktop C++ workload) or full Visual Studio
 - **CMake** on `PATH`
 
-## Quick run from source
+## Run from source
 
 ```powershell
 python -m venv .venv
@@ -28,33 +25,29 @@ python -m venv .venv
 pip install -r requirements.txt
 cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
 cmake --build cpp/build --config Release
+# If MSVC placed the DLL under Release\:
+copy cpp\build\Release\ngpc_core.dll cpp\build\ngpc_core.dll
 python ngpc_shell.py
 ```
 
-Gamepads: **SDL (pygame)** and **XInput** — see `ngpc_input.py`. Fight ABCD behaviour matches Mac (see `docs/MAC_FIGHT_CONTROLS.md` / `ngpc_fight_input.py`).
+The repo may ship a prebuilt **`cpp/build/ngpc_core.dll`** (MSVC) for Windows PyInstaller; on Mac/Linux, CMake produces `ngpc_core.dylib` / `.so` locally instead.
 
-## Packaged `.exe` (PyInstaller)
-
-Upstream uses `NgpCraftEmulator.spec` and CI (`.github/workflows/build.yml`). Windows-specific branding, paths, and Release assets for NGPCraft Arcade will be tracked on this branch.
+## PyInstaller `.exe`
 
 ```powershell
 pip install pyinstaller
 pyinstaller --noconfirm --clean NgpCraftEmulator.spec
+# Output: dist\NgpCraftEmulator.exe (+ bundled files)
 ```
 
-Or trigger **Actions → build → Run workflow** on GitHub and download the Windows artifact from the run (no tag required).
+Zip `dist\` contents for Release (e.g. `NGPCraft-Arcade-v0.5.0-Windows.zip`) and upload to [GitHub Releases](https://github.com/punkysuen/NGPCraft-Arcade/releases).
 
-## Sync with Mac
+## CI
 
-```powershell
-git pull origin windows-edition
-```
+Push a tag matching `v*` to run `.github/workflows/build.yml` (Windows/Linux/macOS PyInstaller). Fork releases may still attach hand-tested zips manually.
 
-When Windows work is ready to ship, merge `windows-edition` → `main` via pull request on GitHub.
+## Gamepads & fight mode
 
-## Goals (initial checklist)
+Same as macOS: enable **Use a controller** in Settings; bind fight ABCD in Controls. XInput and SDL (pygame) are supported on Windows.
 
-- [ ] Confirm fight mode + C/D hold + pad bindings on Windows
-- [ ] PyInstaller build runs; data lives beside `.exe` (not Mac Application Support)
-- [ ] CI / Release asset name: **NGPCraft Arcade** Windows zip
-- [ ] English release notes for first Windows tag
+See [NGPCRAFT_ARCADE.md](NGPCRAFT_ARCADE.md) and [MAC_FIGHT_CONTROLS.md](MAC_FIGHT_CONTROLS.md).
