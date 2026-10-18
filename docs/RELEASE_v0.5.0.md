@@ -89,7 +89,3 @@ See also [docs/MAC_FIGHT_CONTROLS.md](MAC_FIGHT_CONTROLS.md) for fight input det
 - Neo Geo Pocket is a trademark of SNK; this project is not affiliated with SNK.
 
 Full license: [LICENSE](https://github.com/punkysuen/NGPCraft-Arcade/blob/main/LICENSE)
-
-## Previous tag
-
-- [v0.1.0](https://github.com/punkysuen/NGPCraft-Arcade/releases/tag/v0.1.0) — initial macOS edition release
